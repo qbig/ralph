@@ -1,0 +1,17 @@
+{
+  "name": "ralph-loop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "ralph": "./bin/ralph.js"
+  },
+  "scripts": {
+    "start": "bun ./bin/ralph.js",
+    "ralph": "bun ./bin/ralph.js",
+    "test": "bun test"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  }
+}
