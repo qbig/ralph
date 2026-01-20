@@ -23,6 +23,8 @@ Creates the standard ralph loop files in the target directory:
 
 - `AGENTS.md`
 - `IMPLEMENTATION_PLAN.md`
+- `PRD.md`
+- `ProgressTracker.md`
 - `PROMPT_build.md`
 - `PROMPT_plan.md`
 
@@ -31,6 +33,8 @@ Example output:
 ```
 write AGENTS.md
 write IMPLEMENTATION_PLAN.md
+write PRD.md
+write ProgressTracker.md
 write PROMPT_build.md
 write PROMPT_plan.md
 ```

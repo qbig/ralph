@@ -1,0 +1,3 @@
+# Progress Tracker
+
+- [ ] Initial setup

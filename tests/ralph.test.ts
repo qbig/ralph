@@ -66,6 +66,8 @@ test("init copies template files", () => {
   const expected = [
     "AGENTS.md",
     "IMPLEMENTATION_PLAN.md",
+    "PRD.md",
+    "ProgressTracker.md",
     "PROMPT_build.md",
     "PROMPT_plan.md",
   ];
