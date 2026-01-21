@@ -2,6 +2,8 @@
 
 Local CLI that runs a ralph-style Plan & Build loop using Cursor Agent in print mode.
 
+See also: https://github.com/snwfdhmp/awesome-ralph
+
 ## Why & rationale
 
 Ralph exists to make long-running agent work predictable and resumable. It separates planning from building, keeps requirements and progress in simple Markdown files, and repeats small, verifiable iterations until the work is done.
