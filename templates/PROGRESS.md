@@ -10,3 +10,5 @@ Status: in-progress
 
 ## Iteration log
 - (empty)
+
+<!-- Add a line with DONE when all checklist items are checked. -->

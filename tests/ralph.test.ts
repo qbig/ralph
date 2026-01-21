@@ -87,8 +87,10 @@ test("plan mode creates a new branch and records it", () => {
   expect(runGit(["init", "-b", "main"], tmp).exitCode).toBe(0);
   expect(runGit(["config", "user.email", "test@example.com"], tmp).exitCode).toBe(0);
   expect(runGit(["config", "user.name", "Test User"], tmp).exitCode).toBe(0);
+  const ralphDir = path.join(tmp, "ralph");
+  fs.mkdirSync(ralphDir, { recursive: true });
   fs.writeFileSync(path.join(tmp, "README.md"), "init\n", "utf8");
-  fs.writeFileSync(path.join(tmp, "PROMPT_plan.md"), "Plan prompt\n", "utf8");
+  fs.writeFileSync(path.join(ralphDir, "PROMPT_plan.md"), "Plan prompt\n", "utf8");
   expect(runGit(["add", "."], tmp).exitCode).toBe(0);
   expect(runGit(["commit", "-m", "init"], tmp).exitCode).toBe(0);
   const logPath = path.join(tmp, "cursor-log.txt");
@@ -127,7 +129,9 @@ test("plan mode creates a new branch and records it", () => {
 
 test("run uses cursor stub and respects --no-force", () => {
   const tmp = makeTempDir("ralph-run-");
-  const prompt = path.join(tmp, "PROMPT_build.md");
+  const ralphDir = path.join(tmp, "ralph");
+  fs.mkdirSync(ralphDir, { recursive: true });
+  const prompt = path.join(ralphDir, "PROMPT_build.md");
   fs.writeFileSync(prompt, "Hello from test\n", "utf8");
 
   const logPath = path.join(tmp, "cursor-log.txt");
@@ -159,7 +163,9 @@ test("run uses cursor stub and respects --no-force", () => {
 
 test("run defaults to --force", () => {
   const tmp = makeTempDir("ralph-run-force-");
-  const prompt = path.join(tmp, "PROMPT_build.md");
+  const ralphDir = path.join(tmp, "ralph");
+  fs.mkdirSync(ralphDir, { recursive: true });
+  const prompt = path.join(ralphDir, "PROMPT_build.md");
   fs.writeFileSync(prompt, "Hello from test\n", "utf8");
 
   const logPath = path.join(tmp, "cursor-log.txt");
@@ -186,9 +192,11 @@ test("run defaults to --force", () => {
 
 test("build stops immediately when PROGRESS is done", () => {
   const tmp = makeTempDir("ralph-done-");
-  fs.writeFileSync(path.join(tmp, "PROMPT_build.md"), "Build prompt\n", "utf8");
+  const ralphDir = path.join(tmp, "ralph");
+  fs.mkdirSync(ralphDir, { recursive: true });
+  fs.writeFileSync(path.join(ralphDir, "PROMPT_build.md"), "Build prompt\n", "utf8");
   fs.writeFileSync(
-    path.join(tmp, "PROGRESS.md"),
+    path.join(ralphDir, "PROGRESS.md"),
     "Status: in-progress\n- [x] Item A\nDONE\n",
     "utf8"
   );
@@ -221,10 +229,12 @@ test("loop skips plan when PRD is ready", () => {
   expect(runGit(["init", "-b", "main"], tmp).exitCode).toBe(0);
   expect(runGit(["config", "user.email", "test@example.com"], tmp).exitCode).toBe(0);
   expect(runGit(["config", "user.name", "Test User"], tmp).exitCode).toBe(0);
-  fs.writeFileSync(path.join(tmp, "PRD.md"), "Status: ready\n", "utf8");
-  fs.writeFileSync(path.join(tmp, "PROGRESS.md"), "Status: in-progress\n- [x] Item A\nDONE\n", "utf8");
-  fs.writeFileSync(path.join(tmp, "PROMPT_plan.md"), "Plan prompt\n", "utf8");
-  fs.writeFileSync(path.join(tmp, "PROMPT_build.md"), "Build prompt\n", "utf8");
+  const ralphDir = path.join(tmp, "ralph");
+  fs.mkdirSync(ralphDir, { recursive: true });
+  fs.writeFileSync(path.join(ralphDir, "PRD.md"), "Status: ready\n", "utf8");
+  fs.writeFileSync(path.join(ralphDir, "PROGRESS.md"), "Status: in-progress\n- [x] Item A\nDONE\n", "utf8");
+  fs.writeFileSync(path.join(ralphDir, "PROMPT_plan.md"), "Plan prompt\n", "utf8");
+  fs.writeFileSync(path.join(ralphDir, "PROMPT_build.md"), "Build prompt\n", "utf8");
   fs.writeFileSync(path.join(tmp, "README.md"), "init\n", "utf8");
   expect(runGit(["add", "."], tmp).exitCode).toBe(0);
   expect(runGit(["commit", "-m", "init"], tmp).exitCode).toBe(0);
