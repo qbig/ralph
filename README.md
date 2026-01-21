@@ -138,6 +138,7 @@ DONE
 - Build mode will continue on the latest plan branch if recorded.
 - If your working tree has uncommitted changes, ralph will refuse to switch branches.
 - If you need isolation, create a git worktree yourself and run `ralph` inside it.
+- Ralph manages branches and commits; cursor-agent should not run git commands.
 
 ## Logs and state
 
@@ -158,6 +159,10 @@ Or set an API key:
 ```bash
 export CURSOR_API_KEY="..."
 ```
+
+## Cursor CLI invocation
+
+Ralph runs Cursor CLI in non-interactive print mode (`-p` / `--print`) with `--output-format` and `--force` so it can make changes headlessly. It prefers the `agent` command when available and falls back to `cursor-agent`; override with `--cursor-cmd` if needed.
 
 ## Tests
 

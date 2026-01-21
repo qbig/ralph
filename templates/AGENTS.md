@@ -24,6 +24,7 @@
 - Build/loop auto-commits each iteration when there are changes.
 - Ralph files live under `ralph/` by default (override via `--dir` on init or `--ralph-dir` on run/loop/status).
 - Avoid manual git commits in prompts; ralph handles per-iteration commits.
+- Ralph handles branch creation; do not run git commands in the agent.
 
 ### Codebase Patterns
 

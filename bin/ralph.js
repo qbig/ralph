@@ -7,7 +7,7 @@ import { spawn, spawnSync } from "node:child_process";
 const VERSION = "0.1.0";
 const DEFAULT_MODE = "build";
 const DEFAULT_OUTPUT_FORMAT = "stream-json";
-const DEFAULT_CURSOR_CMD = "cursor-agent";
+const DEFAULT_CURSOR_CMDS = ["agent", "cursor-agent"];
 const OUTPUT_FORMATS = new Set(["text", "json", "stream-json"]);
 const MODES = new Set(["build", "plan"]);
 
@@ -41,7 +41,7 @@ Run options:
   --output-format <format>   text | json | stream-json (default: stream-json)
   --[no-]force               Allow file changes in print mode (default: --force)
   --api-key <key>            Cursor API key (optional; else CURSOR_API_KEY)
-  --cursor-cmd <cmd>         Cursor CLI command (default: cursor-agent)
+  --cursor-cmd <cmd>         Cursor CLI command (default: agent, falls back to cursor-agent)
   --skip-auth-check          Skip cursor-agent status check
   --verbose                  Pass --verbose to cursor-agent
 
@@ -192,6 +192,25 @@ function resolveRalphDir(override) {
   if (override) return path.resolve(process.cwd(), override);
   if (process.env.RALPH_DIR) return path.resolve(process.cwd(), process.env.RALPH_DIR);
   return path.resolve(process.cwd(), "ralph");
+}
+
+function commandAvailable(cmd) {
+  const result = spawnSync(cmd, ["--version"], { encoding: "utf8" });
+  if (result.error) {
+    return result.error.code !== "ENOENT";
+  }
+  return result.status === 0;
+}
+
+function resolveCursorCmd(explicitCmd) {
+  if (explicitCmd) return explicitCmd;
+  if (process.env.RALPH_CURSOR_CMD) return process.env.RALPH_CURSOR_CMD;
+  for (const cmd of DEFAULT_CURSOR_CMDS) {
+    if (commandAvailable(cmd)) {
+      return cmd;
+    }
+  }
+  return DEFAULT_CURSOR_CMDS[0];
 }
 
 function initCommand(args) {
@@ -357,19 +376,6 @@ function commitIfNeeded(message) {
   return hashResult.stdout.trim();
 }
 
-function branchExists(branch) {
-  const result = spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
-    encoding: "utf8",
-  });
-  if (result.error) {
-    if (result.error.code === "ENOENT") {
-      die("git not found. Install git to use plan/build branch workflows.");
-    }
-    die(`Failed to check branch ${branch}: ${result.error.message}`);
-  }
-  return result.status === 0;
-}
-
 function checkoutNewBranch(branch) {
   const result = runGit(["checkout", "-b", branch]);
   if (result.status !== 0) {
@@ -413,18 +419,24 @@ function ensurePlanBranch(planBranch) {
   ensureGitRepo();
   const base = planBranch || defaultPlanBranchName();
   let branch = base;
-  if (planBranch) {
-    if (branchExists(branch)) {
-      die(`Plan branch already exists: ${branch}`);
+  let counter = 0;
+  while (true) {
+    const result = runGit(["checkout", "-b", branch]);
+    if (result.status === 0) {
+      break;
     }
-  } else {
-    let counter = 1;
-    while (branchExists(branch)) {
+    const msg = (result.stderr || result.stdout || "").trim();
+    const exists = /already exists|a branch named/i.test(msg);
+    if (exists && !planBranch) {
       counter += 1;
       branch = `${base}-${counter}`;
+      continue;
     }
+    if (exists && planBranch) {
+      die(`Plan branch already exists: ${branch}`);
+    }
+    die(`Failed to create branch ${branch}: ${msg || "non-zero exit"}`);
   }
-  checkoutNewBranch(branch);
   writePlanBranchRecord(branch);
   return branch;
 }
@@ -432,15 +444,16 @@ function ensurePlanBranch(planBranch) {
 function syncToPlanBranchIfNeeded() {
   const planBranch = readPlanBranchRecord();
   if (!planBranch) return null;
-  if (!branchExists(planBranch)) {
-    die(`Recorded plan branch not found: ${planBranch}. Delete the record or recreate the plan.`);
-  }
   const current = getCurrentBranch();
   if (current !== planBranch) {
     if (!isWorktreeClean()) {
       die(`Current branch ${current} has uncommitted changes. Commit or stash before switching to ${planBranch}.`);
     }
-    checkoutBranch(planBranch);
+    const result = runGit(["checkout", planBranch]);
+    if (result.status !== 0) {
+      const msg = (result.stderr || result.stdout || "").trim();
+      die(`Recorded plan branch not found: ${planBranch}. ${msg || "git checkout failed"}`);
+    }
     console.log(`Switched to plan branch: ${planBranch}`);
   }
   return planBranch;
@@ -829,14 +842,14 @@ async function runCommand(args) {
     die(`Unknown arguments: ${positional.join(" ")}`);
   }
 
-  const ralphDir = resolveRalphDir(opts.ralphDir);
+  const ralphDir = resolveRalphDir(opts.ralphDir ?? opts.dir);
   const promptFile = opts.promptFile
     ? path.resolve(process.cwd(), opts.promptFile)
     : path.join(ralphDir, `PROMPT_${mode}.md`);
 
   const outputFormat = opts.outputFormat || DEFAULT_OUTPUT_FORMAT;
   const force = opts.force !== undefined ? opts.force : true;
-  const cursorCmd = opts.cursorCmd || process.env.RALPH_CURSOR_CMD || DEFAULT_CURSOR_CMD;
+  const cursorCmd = resolveCursorCmd(opts.cursorCmd);
   const sleepMs = parseSleepMs(opts.sleep);
   const maxMinutesMs = parseMaxMinutesMs(opts.maxMinutes);
   const untilDone = resolveUntilDone(mode, opts, false);
@@ -877,7 +890,7 @@ async function loopCommand(args) {
     die("Loop mode uses PROMPT_plan.md and PROMPT_build.md. Use 'ralph run --prompt-file' for custom prompts.");
   }
 
-  const ralphDir = resolveRalphDir(opts.ralphDir);
+  const ralphDir = resolveRalphDir(opts.ralphDir ?? opts.dir);
 
   let buildMax = opts.max;
   const positional = [...opts.positional];
@@ -896,7 +909,7 @@ async function loopCommand(args) {
   if (planMax === 0) planMax = 1;
   const outputFormat = opts.outputFormat || DEFAULT_OUTPUT_FORMAT;
   const force = opts.force !== undefined ? opts.force : true;
-  const cursorCmd = opts.cursorCmd || process.env.RALPH_CURSOR_CMD || DEFAULT_CURSOR_CMD;
+  const cursorCmd = resolveCursorCmd(opts.cursorCmd);
   const sleepMs = parseSleepMs(opts.sleep);
   const maxMinutesMs = parseMaxMinutesMs(opts.maxMinutes);
   const untilDone = resolveUntilDone("build", opts, true);
@@ -963,7 +976,7 @@ function statusCommand(args) {
     process.exit(0);
   }
 
-  const ralphDir = resolveRalphDir(opts.ralphDir);
+  const ralphDir = resolveRalphDir(opts.ralphDir ?? opts.dir);
   const inGit = isGitRepo();
   const currentBranch = inGit ? getCurrentBranch() : "n/a";
   const planBranch = inGit ? readPlanBranchRecord() : null;
