@@ -19,6 +19,13 @@ function makeTempDir(prefix: string) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
+function runGit(args: string[], cwd: string) {
+  return Bun.spawnSync({
+    cmd: ["git", ...args],
+    cwd,
+  });
+}
+
 function makeCursorStub(dir: string) {
   const stubPath = path.join(dir, "cursor-stub.js");
   const content = `#!/usr/bin/env bun
@@ -65,15 +72,57 @@ test("init copies template files", () => {
 
   const expected = [
     "AGENTS.md",
-    "IMPLEMENTATION_PLAN.md",
     "PRD.md",
-    "ProgressTracker.md",
+    "PROGRESS.md",
     "PROMPT_build.md",
     "PROMPT_plan.md",
   ];
   for (const name of expected) {
     expect(fs.existsSync(path.join(tmp, name))).toBe(true);
   }
+});
+
+test("plan mode creates a new branch and records it", () => {
+  const tmp = makeTempDir("ralph-plan-");
+  expect(runGit(["init", "-b", "main"], tmp).exitCode).toBe(0);
+  expect(runGit(["config", "user.email", "test@example.com"], tmp).exitCode).toBe(0);
+  expect(runGit(["config", "user.name", "Test User"], tmp).exitCode).toBe(0);
+  fs.writeFileSync(path.join(tmp, "README.md"), "init\n", "utf8");
+  expect(runGit(["add", "."], tmp).exitCode).toBe(0);
+  expect(runGit(["commit", "-m", "init"], tmp).exitCode).toBe(0);
+
+  fs.writeFileSync(path.join(tmp, "PROMPT_plan.md"), "Plan prompt\n", "utf8");
+  const logPath = path.join(tmp, "cursor-log.txt");
+  const stub = makeCursorStub(tmp);
+
+  const result = runCli(
+    [
+      "run",
+      "--mode",
+      "plan",
+      "--max",
+      "1",
+      "--plan-branch",
+      "ralph/plan-test",
+      "--cursor-cmd",
+      stub,
+      "--skip-auth-check",
+    ],
+    {
+      cwd: tmp,
+      env: { TEST_LOG: logPath },
+    }
+  );
+
+  expect(result.exitCode).toBe(0);
+  const branch = runGit(["rev-parse", "--abbrev-ref", "HEAD"], tmp).stdout.toString().trim();
+  expect(branch).toBe("ralph/plan-test");
+
+  const gitDir = runGit(["rev-parse", "--git-dir"], tmp).stdout.toString().trim();
+  const recordPath = path.resolve(tmp, gitDir, "ralph-plan-branch");
+  expect(fs.existsSync(recordPath)).toBe(true);
+  const record = fs.readFileSync(recordPath, "utf8").trim();
+  expect(record).toBe("ralph/plan-test");
 });
 
 test("run uses cursor stub and respects --no-force", () => {

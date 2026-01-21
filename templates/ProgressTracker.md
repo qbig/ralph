@@ -1,3 +1,3 @@
-# Progress Tracker
+# Progress Tracker (deprecated)
 
-- [ ] Initial setup
+Use `PROGRESS.md` instead.

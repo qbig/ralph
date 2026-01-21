@@ -1,18 +1,55 @@
 # ralph (Cursor CLI)
 
-Local CLI that runs a ralph-style plan/build loop using Cursor Agent in print mode.
+Local CLI that runs a ralph-style Plan & Build loop using Cursor Agent in print mode.
 
 ## Requirements
 
 - Bun (preferred runtime)
 - Cursor CLI (`cursor-agent`) installed and authenticated with your existing Cursor account
+- git (required for plan/build branch workflow)
 
 ## Quickstart
 
 ```bash
 bun install
 bun run ralph init
+bun run ralph run --mode plan --max 1
 bun run ralph run --mode build --max 1
+```
+
+## Workflow: Plan & Build
+
+### Plan mode
+
+- Always creates and checks out a new plan branch.
+- Uses the plan skill to generate/update `PRD.md` only (no code changes).
+
+Examples:
+
+```bash
+bun run ralph run --mode plan
+bun run ralph plan
+bun run ralph run plan 3
+```
+
+Optional branch name:
+
+```bash
+bun run ralph run --mode plan --plan-branch ralph/plan-my-feature
+```
+
+### Build mode
+
+- Reads `PRD.md` and `PROGRESS.md` at the start of every iteration.
+- Continues on the plan branch created earlier (auto-switches to it if needed and the worktree is clean).
+- Completes one self-contained part of the work and updates `PROGRESS.md` every iteration.
+
+Examples:
+
+```bash
+bun run ralph run --mode build
+bun run ralph build
+bun run ralph run build 5
 ```
 
 ## Commands and output
@@ -22,9 +59,8 @@ bun run ralph run --mode build --max 1
 Creates the standard ralph loop files in the target directory:
 
 - `AGENTS.md`
-- `IMPLEMENTATION_PLAN.md`
 - `PRD.md`
-- `ProgressTracker.md`
+- `PROGRESS.md`
 - `PROMPT_build.md`
 - `PROMPT_plan.md`
 
@@ -32,9 +68,8 @@ Example output:
 
 ```
 write AGENTS.md
-write IMPLEMENTATION_PLAN.md
 write PRD.md
-write ProgressTracker.md
+write PROGRESS.md
 write PROMPT_build.md
 write PROMPT_plan.md
 ```
@@ -65,6 +100,7 @@ Prompt: PROMPT_build.md
 Cursor: cursor-agent
 Format: stream-json
 Force:  enabled
+Branch: ralph/plan-20260121-203245Z
 Max:    1 iterations
 ------------------------------
 <cursor-agent output>
@@ -82,37 +118,10 @@ Defaults to `ralph run` and accepts the same positional form:
 ralph plan 3
 ```
 
-## Modes
-
-### Plan mode
-
-Uses `PROMPT_plan.md`. The prompt tells the agent to analyze and update `IMPLEMENTATION_PLAN.md` only (no code changes).
-
-Examples:
-
-```bash
-bun run ralph run --mode plan
-bun run ralph plan
-bun run ralph run plan 3
-```
-
-### Build mode
-
-Uses `PROMPT_build.md`. The prompt tells the agent to implement changes, run tests, and update `IMPLEMENTATION_PLAN.md`/`AGENTS.md` as needed.
-
-Examples:
-
-```bash
-bun run ralph run --mode build
-bun run ralph build
-bun run ralph run build 5
-```
-
 ## What the markdowns are for
 
 - `PRD.md`: product requirements and success criteria.
-- `ProgressTracker.md`: lightweight checklist of what has been done.
-- `IMPLEMENTATION_PLAN.md`: detailed plan and work items.
+- `PROGRESS.md`: lightweight progress tracker updated every iteration.
 - `AGENTS.md`: operational runbook (how to build/run/validate).
 
 ## Usage
@@ -155,9 +164,10 @@ bun run ralph run --skip-auth-check --cursor-cmd ./cursor-stub.js
 
 ## Branches and worktrees
 
-- The CLI does not manage branches or worktrees. It runs on whatever branch you already checked out.
+- Plan mode always creates a new branch; use `--plan-branch` to name it.
+- Build mode will continue on the latest plan branch if recorded.
+- If your working tree has uncommitted changes, ralph will refuse to switch branches.
 - If you need isolation, create a git worktree yourself and run `ralph` inside it.
-- To keep all changes on one branch, add a rule in `PROMPT_build.md` like: "Do not run git checkout/branch; keep all changes on the current branch."
 
 ## Cursor Cloud Agent (handoff)
 

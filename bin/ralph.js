@@ -27,6 +27,7 @@ Run options:
   --mode <build|plan>        Select prompt mode (default: build)
   --max <n>                  Max iterations (0 = unlimited)
   --prompt-file <path>       Override prompt file path
+  --plan-branch <name>       Branch name to create for plan mode
   --model <name>             Cursor model name
   --output-format <format>   text | json | stream-json (default: stream-json)
   --[no-]force               Allow file changes in print mode (default: --force)
@@ -85,6 +86,7 @@ function parseFlags(args) {
       "--max",
       "-n",
       "--prompt-file",
+      "--plan-branch",
       "--model",
       "--output-format",
       "--api-key",
@@ -108,6 +110,9 @@ function parseFlags(args) {
           break;
         case "--prompt-file":
           opts.promptFile = value;
+          break;
+        case "--plan-branch":
+          opts.planBranch = value;
           break;
         case "--model":
           opts.model = value;
@@ -160,9 +165,8 @@ function initCommand(args) {
   const templatesDir = resolveTemplatesDir();
   const templates = [
     "AGENTS.md",
-    "IMPLEMENTATION_PLAN.md",
     "PRD.md",
-    "ProgressTracker.md",
+    "PROGRESS.md",
     "PROMPT_build.md",
     "PROMPT_plan.md",
   ];
@@ -201,6 +205,154 @@ function parseMax(value) {
   return n;
 }
 
+function runGit(args) {
+  const result = spawnSync("git", args, { encoding: "utf8" });
+  if (result.error) {
+    if (result.error.code === "ENOENT") {
+      die("git not found. Install git to use plan/build branch workflows.");
+    }
+    die(`Failed to run git ${args.join(" ")}: ${result.error.message}`);
+  }
+  return result;
+}
+
+function tryGit(args) {
+  const result = spawnSync("git", args, { encoding: "utf8" });
+  if (result.error || result.status !== 0) {
+    return null;
+  }
+  return result;
+}
+
+function isGitRepo() {
+  const result = tryGit(["rev-parse", "--is-inside-work-tree"]);
+  return Boolean(result && result.stdout.trim() === "true");
+}
+
+function ensureGitRepo() {
+  const result = runGit(["rev-parse", "--is-inside-work-tree"]);
+  if (result.status !== 0 || result.stdout.trim() !== "true") {
+    die("Not a git repository. Initialize git before running plan mode.");
+  }
+}
+
+function getGitDir() {
+  const result = runGit(["rev-parse", "--git-dir"]);
+  if (result.status !== 0) {
+    die("Unable to resolve git directory.");
+  }
+  const gitDir = result.stdout.trim();
+  if (!gitDir) {
+    die("Unable to resolve git directory.");
+  }
+  return path.resolve(process.cwd(), gitDir);
+}
+
+function getCurrentBranch() {
+  const result = runGit(["rev-parse", "--abbrev-ref", "HEAD"]);
+  if (result.status !== 0) {
+    die("Unable to determine current branch.");
+  }
+  return result.stdout.trim();
+}
+
+function isWorktreeClean() {
+  const result = runGit(["status", "--porcelain"]);
+  if (result.status !== 0) {
+    die("Unable to determine git status.");
+  }
+  return result.stdout.trim().length === 0;
+}
+
+function branchExists(branch) {
+  const result = spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
+    encoding: "utf8",
+  });
+  if (result.error) {
+    if (result.error.code === "ENOENT") {
+      die("git not found. Install git to use plan/build branch workflows.");
+    }
+    die(`Failed to check branch ${branch}: ${result.error.message}`);
+  }
+  return result.status === 0;
+}
+
+function checkoutNewBranch(branch) {
+  const result = runGit(["checkout", "-b", branch]);
+  if (result.status !== 0) {
+    const msg = (result.stderr || result.stdout || "").trim();
+    die(`Failed to create branch ${branch}: ${msg || "non-zero exit"}`);
+  }
+}
+
+function checkoutBranch(branch) {
+  const result = runGit(["checkout", branch]);
+  if (result.status !== 0) {
+    const msg = (result.stderr || result.stdout || "").trim();
+    die(`Failed to checkout branch ${branch}: ${msg || "non-zero exit"}`);
+  }
+}
+
+function defaultPlanBranchName() {
+  const iso = new Date().toISOString();
+  const stamp = iso.replace(/\.\d+Z$/, "Z").replace(/[-:]/g, "").replace("T", "-");
+  return `ralph/plan-${stamp}`;
+}
+
+function getPlanBranchRecordPath() {
+  return path.join(getGitDir(), "ralph-plan-branch");
+}
+
+function writePlanBranchRecord(branch) {
+  const recordPath = getPlanBranchRecordPath();
+  fs.writeFileSync(recordPath, `${branch}\n`, "utf8");
+}
+
+function readPlanBranchRecord() {
+  if (!isGitRepo()) return null;
+  const recordPath = getPlanBranchRecordPath();
+  if (!fs.existsSync(recordPath)) return null;
+  const content = fs.readFileSync(recordPath, "utf8").trim();
+  return content.length > 0 ? content : null;
+}
+
+function ensurePlanBranch(planBranch) {
+  ensureGitRepo();
+  const base = planBranch || defaultPlanBranchName();
+  let branch = base;
+  if (planBranch) {
+    if (branchExists(branch)) {
+      die(`Plan branch already exists: ${branch}`);
+    }
+  } else {
+    let counter = 1;
+    while (branchExists(branch)) {
+      counter += 1;
+      branch = `${base}-${counter}`;
+    }
+  }
+  checkoutNewBranch(branch);
+  writePlanBranchRecord(branch);
+  return branch;
+}
+
+function syncToPlanBranchIfNeeded() {
+  const planBranch = readPlanBranchRecord();
+  if (!planBranch) return null;
+  if (!branchExists(planBranch)) {
+    die(`Recorded plan branch not found: ${planBranch}. Delete the record or recreate the plan.`);
+  }
+  const current = getCurrentBranch();
+  if (current !== planBranch) {
+    if (!isWorktreeClean()) {
+      die(`Current branch ${current} has uncommitted changes. Commit or stash before switching to ${planBranch}.`);
+    }
+    checkoutBranch(planBranch);
+    console.log(`Switched to plan branch: ${planBranch}`);
+  }
+  return planBranch;
+}
+
 function checkCursorInstalled(cmd) {
   const result = spawnSync(cmd, ["--version"], { encoding: "utf8" });
   if (result.error) {
@@ -229,13 +381,14 @@ function checkCursorAuth(cmd, apiKey) {
   }
 }
 
-function printRunBanner({ mode, promptFile, max, outputFormat, force, model, cursorCmd }) {
+function printRunBanner({ mode, promptFile, max, outputFormat, force, model, cursorCmd, branch }) {
   console.log("------------------------------");
   console.log(`Mode:   ${mode}`);
   console.log(`Prompt: ${promptFile}`);
   console.log(`Cursor: ${cursorCmd}`);
   console.log(`Format: ${outputFormat}`);
   console.log(`Force:  ${force ? "enabled" : "disabled"}`);
+  if (branch) console.log(`Branch: ${branch}`);
   if (model) console.log(`Model:  ${model}`);
   if (max > 0) console.log(`Max:    ${max} iterations`);
   console.log("------------------------------");
@@ -297,6 +450,13 @@ async function runCommand(args) {
   const force = opts.force !== undefined ? opts.force : true;
   const cursorCmd = opts.cursorCmd || process.env.RALPH_CURSOR_CMD || DEFAULT_CURSOR_CMD;
 
+  let branch = null;
+  if (mode === "plan") {
+    branch = ensurePlanBranch(opts.planBranch);
+  } else if (mode === "build" && isGitRepo()) {
+    branch = syncToPlanBranchIfNeeded() || getCurrentBranch();
+  }
+
   checkCursorInstalled(cursorCmd);
   if (!opts.skipAuthCheck) {
     checkCursorAuth(cursorCmd, opts.apiKey);
@@ -310,6 +470,7 @@ async function runCommand(args) {
     force,
     model: opts.model,
     cursorCmd,
+    branch,
   });
 
   let iteration = 0;
