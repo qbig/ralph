@@ -357,19 +357,6 @@ function commitIfNeeded(message) {
   return hashResult.stdout.trim();
 }
 
-function branchExists(branch) {
-  const result = spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
-    encoding: "utf8",
-  });
-  if (result.error) {
-    if (result.error.code === "ENOENT") {
-      die("git not found. Install git to use plan/build branch workflows.");
-    }
-    die(`Failed to check branch ${branch}: ${result.error.message}`);
-  }
-  return result.status === 0;
-}
-
 function checkoutNewBranch(branch) {
   const result = runGit(["checkout", "-b", branch]);
   if (result.status !== 0) {
@@ -413,18 +400,24 @@ function ensurePlanBranch(planBranch) {
   ensureGitRepo();
   const base = planBranch || defaultPlanBranchName();
   let branch = base;
-  if (planBranch) {
-    if (branchExists(branch)) {
-      die(`Plan branch already exists: ${branch}`);
+  let counter = 0;
+  while (true) {
+    const result = runGit(["checkout", "-b", branch]);
+    if (result.status === 0) {
+      break;
     }
-  } else {
-    let counter = 1;
-    while (branchExists(branch)) {
+    const msg = (result.stderr || result.stdout || "").trim();
+    const exists = /already exists|a branch named/i.test(msg);
+    if (exists && !planBranch) {
       counter += 1;
       branch = `${base}-${counter}`;
+      continue;
     }
+    if (exists && planBranch) {
+      die(`Plan branch already exists: ${branch}`);
+    }
+    die(`Failed to create branch ${branch}: ${msg || "non-zero exit"}`);
   }
-  checkoutNewBranch(branch);
   writePlanBranchRecord(branch);
   return branch;
 }
@@ -432,15 +425,16 @@ function ensurePlanBranch(planBranch) {
 function syncToPlanBranchIfNeeded() {
   const planBranch = readPlanBranchRecord();
   if (!planBranch) return null;
-  if (!branchExists(planBranch)) {
-    die(`Recorded plan branch not found: ${planBranch}. Delete the record or recreate the plan.`);
-  }
   const current = getCurrentBranch();
   if (current !== planBranch) {
     if (!isWorktreeClean()) {
       die(`Current branch ${current} has uncommitted changes. Commit or stash before switching to ${planBranch}.`);
     }
-    checkoutBranch(planBranch);
+    const result = runGit(["checkout", planBranch]);
+    if (result.status !== 0) {
+      const msg = (result.stderr || result.stdout || "").trim();
+      die(`Recorded plan branch not found: ${planBranch}. ${msg || "git checkout failed"}`);
+    }
     console.log(`Switched to plan branch: ${planBranch}`);
   }
   return planBranch;
