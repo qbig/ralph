@@ -88,12 +88,12 @@ test("plan mode creates a new branch and records it", () => {
   expect(runGit(["config", "user.email", "test@example.com"], tmp).exitCode).toBe(0);
   expect(runGit(["config", "user.name", "Test User"], tmp).exitCode).toBe(0);
   fs.writeFileSync(path.join(tmp, "README.md"), "init\n", "utf8");
+  fs.writeFileSync(path.join(tmp, "PROMPT_plan.md"), "Plan prompt\n", "utf8");
   expect(runGit(["add", "."], tmp).exitCode).toBe(0);
   expect(runGit(["commit", "-m", "init"], tmp).exitCode).toBe(0);
-
-  fs.writeFileSync(path.join(tmp, "PROMPT_plan.md"), "Plan prompt\n", "utf8");
   const logPath = path.join(tmp, "cursor-log.txt");
-  const stub = makeCursorStub(tmp);
+  const stubDir = makeTempDir("ralph-stub-");
+  const stub = makeCursorStub(stubDir);
 
   const result = runCli(
     [
@@ -182,4 +182,72 @@ test("run defaults to --force", () => {
   expect(result.exitCode).toBe(0);
   const log = fs.readFileSync(logPath, "utf8");
   expect(log).toContain("--force");
+});
+
+test("build stops immediately when PROGRESS is done", () => {
+  const tmp = makeTempDir("ralph-done-");
+  fs.writeFileSync(path.join(tmp, "PROMPT_build.md"), "Build prompt\n", "utf8");
+  fs.writeFileSync(
+    path.join(tmp, "PROGRESS.md"),
+    "Status: in-progress\n- [x] Item A\nDONE\n",
+    "utf8"
+  );
+
+  const logPath = path.join(tmp, "cursor-log.txt");
+  const stub = makeCursorStub(tmp);
+
+  const result = runCli(
+    [
+      "run",
+      "--mode",
+      "build",
+      "--until-done",
+      "--cursor-cmd",
+      stub,
+      "--skip-auth-check",
+    ],
+    {
+      cwd: tmp,
+      env: { TEST_LOG: logPath },
+    }
+  );
+
+  expect(result.exitCode).toBe(0);
+  expect(fs.existsSync(logPath)).toBe(false);
+});
+
+test("loop skips plan when PRD is ready", () => {
+  const tmp = makeTempDir("ralph-loop-ready-");
+  expect(runGit(["init", "-b", "main"], tmp).exitCode).toBe(0);
+  expect(runGit(["config", "user.email", "test@example.com"], tmp).exitCode).toBe(0);
+  expect(runGit(["config", "user.name", "Test User"], tmp).exitCode).toBe(0);
+  fs.writeFileSync(path.join(tmp, "PRD.md"), "Status: ready\n", "utf8");
+  fs.writeFileSync(path.join(tmp, "PROGRESS.md"), "Status: in-progress\n- [x] Item A\nDONE\n", "utf8");
+  fs.writeFileSync(path.join(tmp, "PROMPT_plan.md"), "Plan prompt\n", "utf8");
+  fs.writeFileSync(path.join(tmp, "PROMPT_build.md"), "Build prompt\n", "utf8");
+  fs.writeFileSync(path.join(tmp, "README.md"), "init\n", "utf8");
+  expect(runGit(["add", "."], tmp).exitCode).toBe(0);
+  expect(runGit(["commit", "-m", "init"], tmp).exitCode).toBe(0);
+
+  const stubDir = makeTempDir("ralph-stub-");
+  const stub = makeCursorStub(stubDir);
+
+  const result = runCli(
+    [
+      "loop",
+      "--max",
+      "1",
+      "--cursor-cmd",
+      stub,
+      "--skip-auth-check",
+    ],
+    {
+      cwd: tmp,
+    }
+  );
+
+  expect(result.exitCode).toBe(0);
+  const gitDir = runGit(["rev-parse", "--git-dir"], tmp).stdout.toString().trim();
+  const recordPath = path.resolve(tmp, gitDir, "ralph-plan-branch");
+  expect(fs.existsSync(recordPath)).toBe(false);
 });

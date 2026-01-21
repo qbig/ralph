@@ -1,9 +1,11 @@
 # Progress
 
-## Current status
-- [ ] Not started
+Status: in-progress
 
-## Completed items
+## Next up
+- [ ] Define first milestone
+
+## Completed
 - (none)
 
 ## Iteration log

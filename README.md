@@ -13,8 +13,7 @@ Local CLI that runs a ralph-style Plan & Build loop using Cursor Agent in print 
 ```bash
 bun install
 bun run ralph init
-bun run ralph run --mode plan --max 1
-bun run ralph run --mode build --max 1
+bun run ralph loop
 ```
 
 ## Workflow: Plan & Build
@@ -22,14 +21,11 @@ bun run ralph run --mode build --max 1
 ### Plan mode
 
 - Always creates and checks out a new plan branch.
-- Uses the plan skill to generate/update `PRD.md` only (no code changes).
-
-Examples:
+- Uses the plan skill to generate/update `PRD.md` and initialize `PROGRESS.md`.
+- Marks `PRD.md` as ready by setting `Status: ready`.
 
 ```bash
 bun run ralph run --mode plan
-bun run ralph plan
-bun run ralph run plan 3
 ```
 
 Optional branch name:
@@ -43,13 +39,35 @@ bun run ralph run --mode plan --plan-branch ralph/plan-my-feature
 - Reads `PRD.md` and `PROGRESS.md` at the start of every iteration.
 - Continues on the plan branch created earlier (auto-switches to it if needed and the worktree is clean).
 - Completes one self-contained part of the work and updates `PROGRESS.md` every iteration.
-
-Examples:
+- Stops automatically when `PROGRESS.md` contains a line `DONE` and all checklist items are checked.
+- Auto-commits after each iteration when there are changes.
 
 ```bash
 bun run ralph run --mode build
-bun run ralph build
-bun run ralph run build 5
+```
+
+## Recommended entrypoint: `ralph loop`
+
+Runs plan once, then loops build until done:
+
+```bash
+bun run ralph loop
+```
+
+Plan only runs if `PRD.md` is missing or not marked `Status: ready`.
+
+Limit build iterations or runtime:
+
+```bash
+bun run ralph loop --max 5
+bun run ralph loop --max-minutes 60
+bun run ralph loop --sleep 10
+```
+
+Control plan iterations (default 1):
+
+```bash
+bun run ralph loop --plan-max 1
 ```
 
 ## Commands and output
@@ -76,90 +94,26 @@ write PROMPT_plan.md
 
 If files already exist, it prints `skip <file>` unless `--force` is used (then it prints `overwrite <file>`).
 
-### `ralph run` (what happens each iteration)
+### `ralph run`
 
-Each iteration does the following:
+Runs a single mode (plan or build). It prints a banner, streams Cursor Agent output, and prints a loop marker after each iteration.
 
-1) Selects a prompt file (`PROMPT_build.md` or `PROMPT_plan.md`, unless `--prompt-file` is provided).
-2) Reads that prompt and sends it to Cursor Agent in print mode.
-3) Streams Cursor Agent output to the terminal.
-4) Prints a loop marker like `==== LOOP 1 ====`, then repeats until `--max` is reached.
+### `ralph loop`
 
-Markdown updates happen only if the agent edits files. The CLI itself does not rewrite or update your markdowns.
+Runs plan, then build until done. Useful for long-running autonomous loops.
 
-### `ralph run` (banner + streaming output)
+### `ralph status`
 
-Runs the loop using the selected prompt file (default: `PROMPT_build.md`). It prints a banner, then streams Cursor Agent output, then prints a loop marker after each iteration.
+Shows current branch, plan branch, PRD/PROGRESS presence, progress status, and last run state.
 
-Example banner + loop marker:
+## Progress tracking (done detection)
 
-```
-------------------------------
-Mode:   build
-Prompt: PROMPT_build.md
-Cursor: cursor-agent
-Format: stream-json
-Force:  enabled
-Branch: ralph/plan-20260121-203245Z
-Max:    1 iterations
-------------------------------
-<cursor-agent output>
-
-==== LOOP 1 ====
-```
-
-The actual model output is whatever Cursor Agent emits based on `--output-format`.
-
-### `ralph` (no subcommand)
-
-Defaults to `ralph run` and accepts the same positional form:
+`PROGRESS.md` must include an explicit `DONE` line and all checklist items must be checked. For example:
 
 ```
-ralph plan 3
-```
-
-## What the markdowns are for
-
-- `PRD.md`: product requirements and success criteria.
-- `PROGRESS.md`: lightweight progress tracker updated every iteration.
-- `AGENTS.md`: operational runbook (how to build/run/validate).
-
-## Usage
-
-Initialize ralph loop files in the current directory:
-
-```bash
-bun run ralph init
-```
-
-Run a build loop (unlimited iterations):
-
-```bash
-bun run ralph run --mode build
-```
-
-Run a plan loop with a max iteration count:
-
-```bash
-bun run ralph run plan 3
-```
-
-Disable file edits in headless mode:
-
-```bash
-bun run ralph run --no-force
-```
-
-Pass a model and output format:
-
-```bash
-bun run ralph run --model auto --output-format stream-json
-```
-
-Skip the auth check (useful for tests with a stub CLI):
-
-```bash
-bun run ralph run --skip-auth-check --cursor-cmd ./cursor-stub.js
+DONE
+- [x] Requirement A
+- [x] Requirement B
 ```
 
 ## Branches and worktrees
@@ -169,11 +123,11 @@ bun run ralph run --skip-auth-check --cursor-cmd ./cursor-stub.js
 - If your working tree has uncommitted changes, ralph will refuse to switch branches.
 - If you need isolation, create a git worktree yourself and run `ralph` inside it.
 
-## Cursor Cloud Agent (handoff)
+## Logs and state
 
-Cloud handoff is an interactive Cursor CLI feature (prefix a message with `&` to hand off to a cloud agent). `ralph run` is headless/print mode, so it does not expose cloud handoff.
-
-Cloud agents typically work on their own branch/PR. If you need all changes on a single local branch, avoid cloud handoff and run locally.
+- Loop state is recorded under `.git/ralph/state.json` (or `.ralph/state.json` if not in git).
+- Run logs (JSONL) default to `.git/ralph/loop.log` when building or looping.
+- Override log output with `--log-file <path>`.
 
 ## Cursor CLI auth
 
@@ -200,3 +154,4 @@ bun test
 - `ralph run` uses Cursor Agent print mode and enables `--force` by default so file edits are allowed.
 - Prompt templates live in `templates/` and are copied by `ralph init`.
 - Override the cursor CLI command via `--cursor-cmd` or `RALPH_CURSOR_CMD`.
+- Build/loop auto-commits each iteration if there are changes.

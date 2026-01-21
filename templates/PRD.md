@@ -1,5 +1,7 @@
 # PRD
 
+Status: draft
+
 ## Overview
 
 ## Goals
