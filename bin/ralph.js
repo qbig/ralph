@@ -648,13 +648,13 @@ async function runIteration(cmd, args, prompt) {
   });
 }
 
-async function runIterationWithTui({ cmd, args, prompt, title, outputFormat }) {
+async function runIterationWithTui({ cmd, args, prompt, header, outputFormat }) {
   const { runTui } = await import("../src/tui.jsx");
   return await runTui({
     cmd,
     args,
     prompt,
-    title,
+    header,
     outputFormat,
   });
 }
@@ -826,7 +826,14 @@ async function runWithConfig(config) {
     if (verbose) cursorArgs.push("--verbose");
 
     appendLog(resolvedLogFile, "iteration-start", { mode, branch, iteration: iteration + 1 });
-    const title = `ralph ${mode} | iteration ${iteration + 1}${branch ? ` | ${branch}` : ""}`;
+    const header = {
+      mode,
+      iteration: iteration + 1,
+      branch,
+      outputFormat,
+      model,
+      interactive,
+    };
     const exitCode = interactive
       ? await runInteractiveIteration(cursorCmd, cursorArgs, prompt)
       : useTui
@@ -834,7 +841,7 @@ async function runWithConfig(config) {
             cmd: cursorCmd,
             args: cursorArgs,
             prompt,
-            title,
+            header,
             outputFormat,
           })
         : await runIteration(cursorCmd, cursorArgs, prompt);
