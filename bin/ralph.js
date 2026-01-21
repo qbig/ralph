@@ -30,8 +30,9 @@ Run options:
   --max <n>                  Max iterations (0 = unlimited)
   --plan-max <n>             Plan iterations for loop mode (default: 1)
   --prompt-file <path>       Override prompt file path
+  --ralph-dir <path>         Ralph files directory (default: ralph/)
   --plan-branch <name>       Branch name to create for plan mode
-  --until-done               Stop when PROGRESS.md status is done (default: build/loop)
+  --until-done               Stop when PROGRESS.md has DONE + no unchecked items (default: build/loop)
   --no-until-done            Disable done detection
   --sleep <seconds>          Sleep between iterations
   --max-minutes <minutes>    Stop after elapsed minutes
@@ -45,7 +46,7 @@ Run options:
   --verbose                  Pass --verbose to cursor-agent
 
 Init options:
-  --dir <path>               Target directory (default: cwd)
+  --dir <path>               Target directory (default: ralph/)
   --force                    Overwrite existing files
 
 General:
@@ -103,6 +104,7 @@ function parseFlags(args) {
       "-n",
       "--plan-max",
       "--prompt-file",
+      "--ralph-dir",
       "--plan-branch",
       "--model",
       "--output-format",
@@ -130,6 +132,9 @@ function parseFlags(args) {
           break;
         case "--prompt-file":
           opts.promptFile = value;
+          break;
+        case "--ralph-dir":
+          opts.ralphDir = value;
           break;
         case "--plan-max":
           opts.planMax = value;
@@ -183,6 +188,12 @@ function resolveTemplatesDir() {
   return DEFAULT_TEMPLATES_DIR;
 }
 
+function resolveRalphDir(override) {
+  if (override) return path.resolve(process.cwd(), override);
+  if (process.env.RALPH_DIR) return path.resolve(process.cwd(), process.env.RALPH_DIR);
+  return path.resolve(process.cwd(), "ralph");
+}
+
 function initCommand(args) {
   const opts = parseFlags(args);
   if (opts.help) {
@@ -191,7 +202,7 @@ function initCommand(args) {
   }
   const targetDir = opts.dir
     ? path.resolve(process.cwd(), opts.dir)
-    : process.cwd();
+    : resolveRalphDir(opts.ralphDir);
   const force = Boolean(opts.force);
 
   const templatesDir = resolveTemplatesDir();
@@ -631,6 +642,7 @@ async function runWithConfig(config) {
     maxMinutesMs,
     logFile,
     isLoop,
+    ralphDir,
   } = config;
 
   if (!fs.existsSync(promptFile)) {
@@ -649,7 +661,8 @@ async function runWithConfig(config) {
   }
 
   const resolvedLogFile = resolveLogFilePath(logFile, mode, isLoop);
-  const progressPath = path.resolve(process.cwd(), "PROGRESS.md");
+  const baseDir = ralphDir || resolveRalphDir();
+  const progressPath = path.join(baseDir, "PROGRESS.md");
 
   if (mode === "build" && untilDone) {
     const status = readProgressStatus(progressPath);
@@ -816,9 +829,10 @@ async function runCommand(args) {
     die(`Unknown arguments: ${positional.join(" ")}`);
   }
 
+  const ralphDir = resolveRalphDir(opts.ralphDir);
   const promptFile = opts.promptFile
     ? path.resolve(process.cwd(), opts.promptFile)
-    : path.resolve(process.cwd(), `PROMPT_${mode}.md`);
+    : path.join(ralphDir, `PROMPT_${mode}.md`);
 
   const outputFormat = opts.outputFormat || DEFAULT_OUTPUT_FORMAT;
   const force = opts.force !== undefined ? opts.force : true;
@@ -845,6 +859,7 @@ async function runCommand(args) {
     maxMinutesMs,
     logFile,
     isLoop: false,
+    ralphDir,
   });
 }
 
@@ -861,6 +876,8 @@ async function loopCommand(args) {
   if (opts.promptFile) {
     die("Loop mode uses PROMPT_plan.md and PROMPT_build.md. Use 'ralph run --prompt-file' for custom prompts.");
   }
+
+  const ralphDir = resolveRalphDir(opts.ralphDir);
 
   let buildMax = opts.max;
   const positional = [...opts.positional];
@@ -885,9 +902,9 @@ async function loopCommand(args) {
   const untilDone = resolveUntilDone("build", opts, true);
   const logFile = opts.logFile;
 
-  const planPrompt = path.resolve(process.cwd(), "PROMPT_plan.md");
-  const buildPrompt = path.resolve(process.cwd(), "PROMPT_build.md");
-  const prdPath = path.resolve(process.cwd(), "PRD.md");
+  const planPrompt = path.join(ralphDir, "PROMPT_plan.md");
+  const buildPrompt = path.join(ralphDir, "PROMPT_build.md");
+  const prdPath = path.join(ralphDir, "PRD.md");
   const prdStatus = readPrdStatus(prdPath);
   const planNeeded = !prdStatus.ready;
 
@@ -909,6 +926,7 @@ async function loopCommand(args) {
       maxMinutesMs: 0,
       logFile,
       isLoop: true,
+      ralphDir,
     });
   } else {
     console.log("PRD is ready. Skipping plan.");
@@ -934,6 +952,7 @@ async function loopCommand(args) {
     maxMinutesMs,
     logFile,
     isLoop: true,
+    ralphDir,
   });
 }
 
@@ -944,16 +963,18 @@ function statusCommand(args) {
     process.exit(0);
   }
 
+  const ralphDir = resolveRalphDir(opts.ralphDir);
   const inGit = isGitRepo();
   const currentBranch = inGit ? getCurrentBranch() : "n/a";
   const planBranch = inGit ? readPlanBranchRecord() : null;
-  const prdPath = path.resolve(process.cwd(), "PRD.md");
-  const progressPath = path.resolve(process.cwd(), "PROGRESS.md");
+  const prdPath = path.join(ralphDir, "PRD.md");
+  const progressPath = path.join(ralphDir, "PROGRESS.md");
   const prdStatus = readPrdStatus(prdPath);
   const progress = readProgressStatus(progressPath);
   const state = readState();
 
   console.log("Ralph status");
+  console.log(`  Ralph dir:   ${ralphDir}`);
   console.log(`  Git repo:     ${inGit ? "yes" : "no"}`);
   console.log(`  Branch:       ${currentBranch}`);
   console.log(`  Plan branch:  ${planBranch || "none"}`);

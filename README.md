@@ -10,10 +10,10 @@ Ralph exists to make long-running agent work predictable and resumable. It separ
 
 Under the hood it:
 - Creates a dedicated plan branch when planning starts.
-- Uses `PRD.md` as the source of truth for requirements and `PROGRESS.md` as the progress tracker.
+- Uses `ralph/PRD.md` as the source of truth for requirements and `ralph/PROGRESS.md` as the progress tracker.
 - Runs Cursor Agent headlessly in a loop, updating progress every iteration.
 - Auto-commits after each iteration so work is durable and restartable.
-- Stops automatically when `PROGRESS.md` contains `DONE` and all checklist items are checked.
+- Stops automatically when `ralph/PROGRESS.md` contains `DONE` and all checklist items are checked.
 
 ## Requirements
 
@@ -34,8 +34,8 @@ bun run ralph loop
 ### Plan mode
 
 - Always creates and checks out a new plan branch.
-- Uses the plan skill to generate/update `PRD.md` and initialize `PROGRESS.md`.
-- Marks `PRD.md` as ready by setting `Status: ready`.
+- Uses the plan skill to generate/update `ralph/PRD.md` and initialize `ralph/PROGRESS.md`.
+- Marks `ralph/PRD.md` as ready by setting `Status: ready`.
 
 ```bash
 bun run ralph run --mode plan
@@ -49,10 +49,10 @@ bun run ralph run --mode plan --plan-branch ralph/plan-my-feature
 
 ### Build mode
 
-- Reads `PRD.md` and `PROGRESS.md` at the start of every iteration.
+- Reads `ralph/PRD.md` and `ralph/PROGRESS.md` at the start of every iteration.
 - Continues on the plan branch created earlier (auto-switches to it if needed and the worktree is clean).
-- Completes one self-contained part of the work and updates `PROGRESS.md` every iteration.
-- Stops automatically when `PROGRESS.md` contains a line `DONE` and all checklist items are checked.
+- Completes one self-contained part of the work and updates `ralph/PROGRESS.md` every iteration.
+- Stops automatically when `ralph/PROGRESS.md` contains a line `DONE` and all checklist items are checked.
 - Auto-commits after each iteration when there are changes.
 
 ```bash
@@ -67,7 +67,7 @@ Runs plan once, then loops build until done:
 bun run ralph loop
 ```
 
-Plan only runs if `PRD.md` is missing or not marked `Status: ready`.
+Plan only runs if `ralph/PRD.md` is missing or not marked `Status: ready`.
 
 Limit build iterations or runtime:
 
@@ -89,27 +89,29 @@ bun run ralph loop --plan-max 1
 
 Creates the standard ralph loop files in the target directory:
 
-- `AGENTS.md`
-- `PRD.md`
-- `PROGRESS.md`
-- `PROMPT_build.md`
-- `PROMPT_plan.md`
+- `ralph/AGENTS.md`
+- `ralph/PRD.md`
+- `ralph/PROGRESS.md`
+- `ralph/PROMPT_build.md`
+- `ralph/PROMPT_plan.md`
 
 Example output:
 
 ```
-write AGENTS.md
-write PRD.md
-write PROGRESS.md
-write PROMPT_build.md
-write PROMPT_plan.md
+write ralph/AGENTS.md
+write ralph/PRD.md
+write ralph/PROGRESS.md
+write ralph/PROMPT_build.md
+write ralph/PROMPT_plan.md
 ```
 
 If files already exist, it prints `skip <file>` unless `--force` is used (then it prints `overwrite <file>`).
+Use `--dir <path>` to change the ralph directory (default: `ralph/`).
 
 ### `ralph run`
 
 Runs a single mode (plan or build). It prints a banner, streams Cursor Agent output, and prints a loop marker after each iteration.
+Use `--ralph-dir <path>` (or `RALPH_DIR`) to point at a different ralph directory.
 
 ### `ralph loop`
 
@@ -118,10 +120,11 @@ Runs plan, then build until done. Useful for long-running autonomous loops.
 ### `ralph status`
 
 Shows current branch, plan branch, PRD/PROGRESS presence, progress status, and last run state.
+Use `--ralph-dir <path>` (or `RALPH_DIR`) to point at a different ralph directory.
 
 ## Progress tracking (done detection)
 
-`PROGRESS.md` must include an explicit `DONE` line and all checklist items must be checked. For example:
+`ralph/PROGRESS.md` must include an explicit `DONE` line and all checklist items must be checked. For example:
 
 ```
 DONE
@@ -168,3 +171,5 @@ bun test
 - Prompt templates live in `templates/` and are copied by `ralph init`.
 - Override the cursor CLI command via `--cursor-cmd` or `RALPH_CURSOR_CMD`.
 - Build/loop auto-commits each iteration if there are changes.
+- Use `--ralph-dir <path>` (or `RALPH_DIR`) to point run/loop/status at a different ralph directory.
+- Prompts should avoid manual git commits; ralph auto-commits each iteration.
