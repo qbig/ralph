@@ -2,6 +2,17 @@
 
 Local CLI that runs a ralph-style Plan & Build loop using Cursor Agent in print mode.
 
+## Why & rationale
+
+Ralph exists to make long-running agent work predictable and resumable. It separates planning from building, keeps requirements and progress in simple Markdown files, and repeats small, verifiable iterations until the work is done.
+
+Under the hood it:
+- Creates a dedicated plan branch when planning starts.
+- Uses `PRD.md` as the source of truth for requirements and `PROGRESS.md` as the progress tracker.
+- Runs Cursor Agent headlessly in a loop, updating progress every iteration.
+- Auto-commits after each iteration so work is durable and restartable.
+- Stops automatically when `PROGRESS.md` contains `DONE` and all checklist items are checked.
+
 ## Requirements
 
 - Bun (preferred runtime)
