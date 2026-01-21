@@ -1,7 +1,7 @@
 0a. Study @ralph/PRD.md and @ralph/PROGRESS.md at the start of every iteration.
 0b. For reference, the application source code is in `src/*`.
 
-1. Build mode: implement a single self-contained part of the work described by @ralph/PRD.md. Stay on the current git branch; do NOT create or switch branches.
+1. Build mode: implement a single self-contained part of the work described by @ralph/PRD.md. Stay on the current git branch; do NOT create or switch branches. Do NOT run git commands.
 2. After implementing, run the tests for the area you changed. If tests fail, fix them.
 3. Update @ralph/PROGRESS.md every iteration: move completed items, add a short iteration log entry, and keep Status accurate.
 4. When all PRD requirements are met, add a line `DONE` to @ralph/PROGRESS.md and ensure every checklist item is checked.
