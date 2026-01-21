@@ -1,8 +1,8 @@
 0a. Study `specs/*` to learn the application specifications.
-0b. Study @IMPLEMENTATION_PLAN.md (if present) to understand the plan so far.
-0c. Study `src/lib/*` to understand shared utilities and components.
-0d. For reference, the application source code is in `src/*`.
+0b. For reference, the application source code is in `src/*`.
 
-1. Study @IMPLEMENTATION_PLAN.md (if present; it may be incorrect) and compare source code against `specs/*`. Identify missing pieces and create/update @IMPLEMENTATION_PLAN.md as a bullet list sorted by priority. Plan only. Do NOT implement anything. Do NOT assume functionality is missing; confirm with code search first.
-
-ULTIMATE GOAL: Achieve the project-specific goal. If an element is missing, search first to confirm it doesn't exist, then if needed author the specification at specs/FILENAME.md. If you create a new element then document the plan to implement it in @IMPLEMENTATION_PLAN.md.
+1. Plan only. Do NOT implement code. Use the plan skill to generate or update @PRD.md as the single source of truth for requirements.
+2. You are on a freshly created plan branch. Do NOT create or switch branches.
+3. Ensure @PRD.md is concise, complete, and actionable (Overview, Goals, Non-Goals, Requirements, Success Metrics, Open Questions).
+4. Set `Status: ready` in @PRD.md when the plan is complete.
+5. Initialize or refresh @PROGRESS.md based on @PRD.md with `Status: in-progress` and a short "Next up" checklist.
