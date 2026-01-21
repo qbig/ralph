@@ -106,6 +106,7 @@ test("plan mode creates a new branch and records it", () => {
       "1",
       "--plan-branch",
       "ralph/plan-test",
+      "--non-interactive",
       "--cursor-cmd",
       stub,
       "--skip-auth-check",
