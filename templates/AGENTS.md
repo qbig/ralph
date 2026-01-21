@@ -3,8 +3,9 @@
 - Install: `bun install`
 - Run CLI: `bun run ralph <command>`
 - Initialize ralph files: `bun run ralph init`
-- Plan loop (creates new branch): `bun run ralph run --mode plan --max 1`
-- Build loop (continues on plan branch): `bun run ralph run --mode build`
+- Plan loop (interactive, creates new branch): `bun run ralph run --mode plan`
+- Plan loop (non-interactive): `bun run ralph run --mode plan --non-interactive`
+- Build loop (non-interactive, continues on plan branch): `bun run ralph run --mode build`
 - Full loop (plan then build until done): `bun run ralph loop`
 - Status: `bun run ralph status`
 
@@ -16,15 +17,16 @@
 
 ## Operational Notes
 
-- Requires Cursor CLI (`cursor-agent`) installed and authenticated.
+- Requires Cursor CLI (`agent` or `cursor-agent`) installed and authenticated.
 - Headless runs use `--force` by default; pass `--no-force` for read-only runs.
-- Plan mode updates `ralph/PRD.md`; build mode uses `ralph/PRD.md` + `ralph/PROGRESS.md` and updates `ralph/PROGRESS.md` each iteration.
+- Plan mode is interactive by default and updates `ralph/PRD.md`; build mode uses `ralph/PRD.md` + `ralph/PROGRESS.md` and updates `ralph/PROGRESS.md` each iteration.
 - Build/loop stops when `PROGRESS.md` contains `DONE` and all checklist items are checked.
 - Plan mode always creates and checks out a new branch.
 - Build/loop auto-commits each iteration when there are changes.
 - Ralph files live under `ralph/` by default (override via `--dir` on init or `--ralph-dir` on run/loop/status).
 - Avoid manual git commits in prompts; ralph handles per-iteration commits.
 - Ralph handles branch creation; do not run git commands in the agent.
+- Non-interactive runs use an Ink TUI for readable output; disable with `--no-tui`.
 
 ### Codebase Patterns
 

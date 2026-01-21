@@ -11,14 +11,14 @@ Ralph exists to make long-running agent work predictable and resumable. It separ
 Under the hood it:
 - Creates a dedicated plan branch when planning starts.
 - Uses `ralph/PRD.md` as the source of truth for requirements and `ralph/PROGRESS.md` as the progress tracker.
-- Runs Cursor Agent headlessly in a loop, updating progress every iteration.
+- Runs plan mode interactively so you can answer questions, then runs build mode headlessly with a readable TUI.
 - Auto-commits after each iteration so work is durable and restartable.
 - Stops automatically when `ralph/PROGRESS.md` contains `DONE` and all checklist items are checked.
 
 ## Requirements
 
 - Bun (preferred runtime)
-- Cursor CLI (`cursor-agent`) installed and authenticated with your existing Cursor account
+- Cursor CLI (`agent` or `cursor-agent`) installed and authenticated with your existing Cursor account
 - git (required for plan/build branch workflow)
 
 ## Quickstart
@@ -29,16 +29,37 @@ bun run ralph init
 bun run ralph loop
 ```
 
+## Install globally (optional)
+
+```bash
+bun link --global
+ralph --help
+```
+
+## Update local CLI
+
+```bash
+git pull
+bun install
+```
+
 ## Workflow: Plan & Build
 
 ### Plan mode
 
+- Interactive by default (Cursor plan mode), so you can answer questions and steer scope.
 - Always creates and checks out a new plan branch.
 - Uses the plan skill to generate/update `ralph/PRD.md` and initialize `ralph/PROGRESS.md`.
 - Marks `ralph/PRD.md` as ready by setting `Status: ready`.
 
 ```bash
 bun run ralph run --mode plan
+```
+
+Headless plan (no prompts):
+
+```bash
+bun run ralph run --mode plan --non-interactive
 ```
 
 Optional branch name:
@@ -49,6 +70,7 @@ bun run ralph run --mode plan --plan-branch ralph/plan-my-feature
 
 ### Build mode
 
+- Non-interactive by default; uses an Ink TUI to render Cursor stream output.
 - Reads `ralph/PRD.md` and `ralph/PROGRESS.md` at the start of every iteration.
 - Continues on the plan branch created earlier (auto-switches to it if needed and the worktree is clean).
 - Completes one self-contained part of the work and updates `ralph/PROGRESS.md` every iteration.
@@ -59,6 +81,13 @@ bun run ralph run --mode plan --plan-branch ralph/plan-my-feature
 bun run ralph run --mode build
 ```
 
+Disable the TUI or force interactive mode:
+
+```bash
+bun run ralph run --mode build --no-tui
+bun run ralph run --mode build --interactive
+```
+
 ## Recommended entrypoint: `ralph loop`
 
 Runs plan once, then loops build until done:
@@ -67,7 +96,7 @@ Runs plan once, then loops build until done:
 bun run ralph loop
 ```
 
-Plan only runs if `ralph/PRD.md` is missing or not marked `Status: ready`.
+Plan only runs if `ralph/PRD.md` is missing or not marked `Status: ready`. Plan is interactive by default; build runs headlessly with a TUI.
 
 Limit build iterations or runtime:
 
@@ -81,6 +110,13 @@ Control plan iterations (default 1):
 
 ```bash
 bun run ralph loop --plan-max 1
+```
+
+Force headless plan or disable the TUI:
+
+```bash
+bun run ralph loop --non-interactive
+bun run ralph loop --no-tui
 ```
 
 ## Commands and output
@@ -110,7 +146,7 @@ Use `--dir <path>` to change the ralph directory (default: `ralph/`).
 
 ### `ralph run`
 
-Runs a single mode (plan or build). It prints a banner, streams Cursor Agent output, and prints a loop marker after each iteration.
+Runs a single mode (plan or build). It prints a banner, streams Cursor Agent output, and prints a loop marker after each iteration. Non-interactive runs use the Ink TUI by default; interactive plan runs the Cursor CLI normally.
 Use `--ralph-dir <path>` (or `RALPH_DIR`) to point at a different ralph directory.
 
 ### `ralph loop`
@@ -121,6 +157,12 @@ Runs plan, then build until done. Useful for long-running autonomous loops.
 
 Shows current branch, plan branch, PRD/PROGRESS presence, progress status, and last run state.
 Use `--ralph-dir <path>` (or `RALPH_DIR`) to point at a different ralph directory.
+
+## Interactive vs non-interactive
+
+- Plan defaults to interactive; build defaults to non-interactive print mode.
+- Override with `--interactive` / `--non-interactive`.
+- Non-interactive output uses the Ink TUI by default; disable with `--no-tui` or switch to raw output via `--output-format text`.
 
 ## Progress tracking (done detection)
 
@@ -152,6 +194,7 @@ The CLI uses your existing Cursor account. Log in once:
 
 ```bash
 cursor-agent login
+# or: agent login
 ```
 
 Or set an API key:
@@ -162,7 +205,16 @@ export CURSOR_API_KEY="..."
 
 ## Cursor CLI invocation
 
-Ralph runs Cursor CLI in non-interactive print mode (`-p` / `--print`) with `--output-format` and `--force` so it can make changes headlessly. It prefers the `agent` command when available and falls back to `cursor-agent`; override with `--cursor-cmd` if needed.
+Ralph uses Cursor CLI in two ways:
+
+- Plan: interactive `--mode plan` so the agent can ask questions.
+- Build/loop: non-interactive print mode (`--print`) with `--output-format` and `--force` so it can make changes headlessly.
+
+Ralph prefers the `agent` command when available and falls back to `cursor-agent`; override with `--cursor-cmd` if needed.
+
+## Cursor Cloud Agent (optional)
+
+Cursor CLI supports handing off to the cloud agent by prefixing a message with `&`. Ralph does not manage cloud agent branching; it stays on your current branch and continues to commit locally.
 
 ## Tests
 
@@ -172,7 +224,7 @@ bun test
 
 ## Notes
 
-- `ralph run` uses Cursor Agent print mode and enables `--force` by default so file edits are allowed.
+- Non-interactive runs use Cursor Agent print mode and enable `--force` by default so file edits are allowed.
 - Prompt templates live in `templates/` and are copied by `ralph init`.
 - Override the cursor CLI command via `--cursor-cmd` or `RALPH_CURSOR_CMD`.
 - Build/loop auto-commits each iteration if there are changes.

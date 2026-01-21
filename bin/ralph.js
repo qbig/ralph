@@ -39,6 +39,10 @@ Run options:
   --log-file <path>          Append JSONL run logs to this file
   --model <name>             Cursor model name
   --output-format <format>   text | json | stream-json (default: stream-json)
+  --interactive              Use Cursor CLI interactive mode (default: plan)
+  --non-interactive          Use Cursor CLI print mode (default: build)
+  --tui                      Render print output with Ink TUI (default: on for TTY)
+  --no-tui                   Disable Ink TUI
   --[no-]force               Allow file changes in print mode (default: --force)
   --api-key <key>            Cursor API key (optional; else CURSOR_API_KEY)
   --cursor-cmd <cmd>         Cursor CLI command (default: agent, falls back to cursor-agent)
@@ -86,6 +90,22 @@ function parseFlags(args) {
     }
     if (arg === "--no-until-done") {
       opts.untilDone = false;
+      continue;
+    }
+    if (arg === "--interactive") {
+      opts.interactive = true;
+      continue;
+    }
+    if (arg === "--non-interactive") {
+      opts.interactive = false;
+      continue;
+    }
+    if (arg === "--tui") {
+      opts.tui = true;
+      continue;
+    }
+    if (arg === "--no-tui") {
+      opts.tui = false;
       continue;
     }
     if (arg === "--verbose") {
@@ -578,7 +598,7 @@ function checkCursorAuth(cmd, apiKey) {
   }
   const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
   if (result.status !== 0 || /not authenticated|not logged in|login required/i.test(output)) {
-    die("Cursor CLI is not authenticated. Run 'cursor-agent login' or set CURSOR_API_KEY / --api-key.");
+    die("Cursor CLI is not authenticated. Run 'cursor-agent login' (or 'agent login') or set CURSOR_API_KEY / --api-key.");
   }
 }
 
@@ -594,6 +614,8 @@ function printRunBanner({
   untilDone,
   sleepMs,
   maxMinutesMs,
+  interactive,
+  useTui,
 }) {
   console.log("------------------------------");
   console.log(`Mode:   ${mode}`);
@@ -601,6 +623,10 @@ function printRunBanner({
   console.log(`Cursor: ${cursorCmd}`);
   console.log(`Format: ${outputFormat}`);
   console.log(`Force:  ${force ? "enabled" : "disabled"}`);
+  console.log(`Interact:${interactive ? " yes" : " no"}`);
+  if (!interactive) {
+    console.log(`TUI:    ${useTui ? "enabled" : "disabled"}`);
+  }
   if (branch) console.log(`Branch: ${branch}`);
   if (model) console.log(`Model:  ${model}`);
   if (max > 0) console.log(`Max:    ${max} iterations`);
@@ -614,8 +640,33 @@ async function runIteration(cmd, args, prompt) {
   return await new Promise((resolve) => {
     const child = spawn(cmd, args, { stdio: ["pipe", "inherit", "inherit"] });
     child.on("error", () => resolve(1));
-    child.stdin.write(prompt);
-    child.stdin.end();
+    if (prompt) {
+      child.stdin.write(prompt);
+      child.stdin.end();
+    }
+    child.on("close", (code) => resolve(code ?? 1));
+  });
+}
+
+async function runIterationWithTui({ cmd, args, prompt, title, outputFormat }) {
+  const { runTui } = await import("../src/tui.jsx");
+  return await runTui({
+    cmd,
+    args,
+    prompt,
+    title,
+    outputFormat,
+  });
+}
+
+async function runInteractiveIteration(cmd, args, prompt) {
+  return await new Promise((resolve) => {
+    const fullArgs = [...args];
+    if (prompt && prompt.trim().length > 0) {
+      fullArgs.push(prompt.trim());
+    }
+    const child = spawn(cmd, fullArgs, { stdio: "inherit" });
+    child.on("error", () => resolve(1));
     child.on("close", (code) => resolve(code ?? 1));
   });
 }
@@ -625,6 +676,19 @@ function resolveUntilDone(mode, opts, isLoop) {
   if (mode === "build") return true;
   if (isLoop) return true;
   return false;
+}
+
+function resolveInteractive(mode, opts) {
+  if (opts.interactive !== undefined) return opts.interactive;
+  return mode === "plan";
+}
+
+function resolveUseTui(opts, outputFormat, interactive) {
+  if (interactive) return false;
+  if (opts.tui !== undefined) return opts.tui;
+  if (!process.stdout.isTTY) return false;
+  if (outputFormat === "json") return false;
+  return true;
 }
 
 function resolveLogFilePath(logFile, mode, isLoop) {
@@ -656,6 +720,8 @@ async function runWithConfig(config) {
     logFile,
     isLoop,
     ralphDir,
+    interactive,
+    useTui,
   } = config;
 
   if (!fs.existsSync(promptFile)) {
@@ -716,6 +782,8 @@ async function runWithConfig(config) {
     untilDone,
     sleepMs,
     maxMinutesMs,
+    interactive,
+    useTui,
   });
 
   appendLog(resolvedLogFile, "start", {
@@ -749,13 +817,27 @@ async function runWithConfig(config) {
     const prompt = fs.readFileSync(promptFile, "utf8");
     const cursorArgs = [];
     if (apiKey) cursorArgs.push("--api-key", apiKey);
-    cursorArgs.push("--print", "--output-format", outputFormat);
+    if (mode === "plan") cursorArgs.push("--mode", "plan");
+    if (!interactive) {
+      cursorArgs.push("--print", "--output-format", outputFormat);
+      if (force) cursorArgs.push("--force");
+    }
     if (model) cursorArgs.push("--model", model);
-    if (force) cursorArgs.push("--force");
     if (verbose) cursorArgs.push("--verbose");
 
     appendLog(resolvedLogFile, "iteration-start", { mode, branch, iteration: iteration + 1 });
-    const exitCode = await runIteration(cursorCmd, cursorArgs, prompt);
+    const title = `ralph ${mode} | iteration ${iteration + 1}${branch ? ` | ${branch}` : ""}`;
+    const exitCode = interactive
+      ? await runInteractiveIteration(cursorCmd, cursorArgs, prompt)
+      : useTui
+        ? await runIterationWithTui({
+            cmd: cursorCmd,
+            args: cursorArgs,
+            prompt,
+            title,
+            outputFormat,
+          })
+        : await runIteration(cursorCmd, cursorArgs, prompt);
     if (exitCode !== 0) {
       appendLog(resolvedLogFile, "error", { mode, branch, iteration: iteration + 1, exitCode });
       writeState({
@@ -854,6 +936,8 @@ async function runCommand(args) {
   const maxMinutesMs = parseMaxMinutesMs(opts.maxMinutes);
   const untilDone = resolveUntilDone(mode, opts, false);
   const logFile = opts.logFile;
+  const interactive = resolveInteractive(mode, opts);
+  const useTui = resolveUseTui(opts, outputFormat, interactive);
 
   await runWithConfig({
     mode,
@@ -873,6 +957,8 @@ async function runCommand(args) {
     logFile,
     isLoop: false,
     ralphDir,
+    interactive,
+    useTui,
   });
 }
 
@@ -914,6 +1000,10 @@ async function loopCommand(args) {
   const maxMinutesMs = parseMaxMinutesMs(opts.maxMinutes);
   const untilDone = resolveUntilDone("build", opts, true);
   const logFile = opts.logFile;
+  const planInteractive = resolveInteractive("plan", opts);
+  const buildInteractive = resolveInteractive("build", opts);
+  const planUseTui = resolveUseTui(opts, outputFormat, planInteractive);
+  const buildUseTui = resolveUseTui(opts, outputFormat, buildInteractive);
 
   const planPrompt = path.join(ralphDir, "PROMPT_plan.md");
   const buildPrompt = path.join(ralphDir, "PROMPT_build.md");
@@ -940,6 +1030,8 @@ async function loopCommand(args) {
       logFile,
       isLoop: true,
       ralphDir,
+      interactive: planInteractive,
+      useTui: planUseTui,
     });
   } else {
     console.log("PRD is ready. Skipping plan.");
@@ -966,6 +1058,8 @@ async function loopCommand(args) {
     logFile,
     isLoop: true,
     ralphDir,
+    interactive: buildInteractive,
+    useTui: buildUseTui,
   });
 }
 
