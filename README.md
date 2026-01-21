@@ -1,4 +1,4 @@
-# ralph (Cursor CLI)
+# Ralph Loop for Cursor CLI
 
 Local CLI that runs a ralph-style Plan & Build loop using Cursor Agent in print mode.
 
